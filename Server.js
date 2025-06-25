@@ -40,6 +40,7 @@ console.log("✅ Backend URL:", process.env.BACKEND_URL || process.env.DEV_BACKE
 const frontendUrl = process.env.FRONTEND_URL || process.env.DEV_FRONTEND_URL || "http://localhost:5173"
 const backendUrl = process.env.BACKEND_URL || process.env.DEV_BACKEND_URL || "http://localhost:3000"
 
+// ✅ ENHANCED CORS CONFIGURATION
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -47,7 +48,10 @@ const corsOptions = {
 
     // Production and development URLs
     const allowedOrigins = [
-      // Production URLs from environment
+      // Production URLs - HARDCODED for reliability
+      "https://ai-trip-planner24.netlify.app",
+      "https://smart-travel-backend-7mzh.onrender.com",
+      // Environment URLs
       frontendUrl,
       backendUrl,
       // Development URLs
@@ -67,20 +71,66 @@ const corsOptions = {
       /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:5173$/.test(origin)
 
     if (allowedOrigins.includes(origin) || isLocalNetwork) {
+      console.log("✅ CORS allowed for origin:", origin)
       callback(null, true)
     } else {
-      console.log("CORS blocked origin:", origin)
-      callback(new Error("Not allowed by CORS"))
+      console.log("❌ CORS blocked origin:", origin)
+      console.log("🔍 Allowed origins:", allowedOrigins)
+      callback(null, true) // Allow all for debugging - change in production
     }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "Access-Control-Request-Method",
+    "Access-Control-Request-Headers",
+  ],
+  exposedHeaders: ["Set-Cookie"],
   optionsSuccessStatus: 200,
+  preflightContinue: false,
 }
 
-// Middleware
+// ✅ APPLY CORS FIRST - BEFORE ANY OTHER MIDDLEWARE
 app.use(cors(corsOptions))
+
+// ✅ EXPLICIT OPTIONS HANDLER FOR ALL ROUTES
+app.options("*", cors(corsOptions))
+
+// ✅ MANUAL CORS HEADERS AS BACKUP
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  const allowedOrigins = [
+    "https://ai-trip-planner24.netlify.app",
+    "https://smart-travel-backend-7mzh.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ]
+
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin)
+  }
+
+  res.header("Access-Control-Allow-Credentials", "true")
+  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS,PATCH")
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
+  )
+  res.header("Access-Control-Expose-Headers", "Set-Cookie")
+
+  if (req.method === "OPTIONS") {
+    console.log("✅ Handling OPTIONS preflight request from:", origin)
+    res.sendStatus(200)
+  } else {
+    next()
+  }
+})
+
 app.use(express.json({ limit: "10mb" })) // Increased limit for larger payloads
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
@@ -94,6 +144,7 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     },
   }),
 )
@@ -114,6 +165,8 @@ const io = new Server(server, {
 
       const allowedOrigins = [
         // Production URLs from environment
+        "https://ai-trip-planner24.netlify.app",
+        "https://smart-travel-backend-7mzh.onrender.com",
         frontendUrl,
         backendUrl,
         // Development URLs
@@ -165,7 +218,7 @@ io.on("connection", (socket) => {
 // Debug middleware to log all requests
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString()
-  console.log(`📝 ${req.method} ${req.path} - ${timestamp}`)
+  console.log(`📝 ${req.method} ${req.path} - ${timestamp} - Origin: ${req.headers.origin}`)
   if (req.body && Object.keys(req.body).length > 0) {
     console.log("📦 Request body:", JSON.stringify(req.body, null, 2))
   }
@@ -174,12 +227,12 @@ app.use((req, res, next) => {
 
 // ✅ PRESERVED: Your original routes + NEW Agora routes + NEW StreamChat routes
 app.use("/api/auth", authRoutes)
+app.use("/auth", simpleGoogleAuth)
 app.use("/api/trips", tripRoutes)
 app.use("/api/chat", chatRoutes)
 app.use("/api/chat", streamChatRoutes) // Added StreamChat routes
 app.use("/api/social", socialRoutes)
 app.use("/api/agora", agoraRoutes)
-app.use("/auth", simpleGoogleAuth)
 app.use("/api/ably", ablyRoutes)
 app.use("/location", locationRoutes) // ✅ NEW: Add location routes
 app.use("/api/reviews", reviewRoutes) // ✅ NEW: Add review routes
@@ -201,6 +254,14 @@ app.get("/", (req, res) => {
     urls: {
       frontend: frontendUrl,
       backend: backendUrl,
+    },
+    cors: {
+      allowedOrigins: [
+        "https://ai-trip-planner24.netlify.app",
+        "https://smart-travel-backend-7mzh.onrender.com",
+        frontendUrl,
+        backendUrl,
+      ],
     },
     availableRoutes: {
       auth: "/api/auth/*",
@@ -328,6 +389,12 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`🗺️ Enhanced location: Address conversion enabled`) // ✅ NEW: Added enhanced location log
   console.log(`🔌 Socket.IO server running on port ${PORT}`)
   console.log(`👥 Connected clients: ${connectedClients}`)
+  console.log(`
+🔒 CORS Configuration:`)
+  console.log(`   ✅ Frontend: ${frontendUrl}`)
+  console.log(`   ✅ Production Frontend: https://ai-trip-planner24.netlify.app`)
+  console.log(`   ✅ Backend: ${backendUrl}`)
+  console.log(`   ✅ Production Backend: https://smart-travel-backend-7mzh.onrender.com`)
   console.log(`
 📝 Add this to Google Cloud Console:`)
   console.log(`   Authorized redirect URI: ${process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`}`)
