@@ -3,8 +3,9 @@ import cors from "cors"
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
+       "https://ai-trip-planner24.netlify.app",
       "http://localhost:5173",
-      "https://ai-trip-planner24.netlify.app"
+     
     ]
 
     if (!origin || allowedOrigins.includes(origin)) {

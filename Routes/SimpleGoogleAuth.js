@@ -8,7 +8,7 @@ const router = express.Router()
 // Google OAuth initiation
 router.get("/google", (req, res) => {
   // Use exact redirect URI that matches Google Cloud Console
-  const redirectUri = "http://localhost:3000/auth/google/ProjectforGoogleOauth"
+  const redirectUri = `${process.env.BACKEND_URL}/auth/google/ProjectforGoogleOauth`
 
   const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth")
   googleAuthUrl.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID)
@@ -31,17 +31,17 @@ router.get("/google/ProjectforGoogleOauth", async (req, res) => {
 
     if (error) {
       console.error("❌ Google OAuth error:", error, error_description)
-      return res.redirect(`http://localhost:5173/login?error=${encodeURIComponent(error)}`)
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=${encodeURIComponent(error)}`)
     }
 
     if (!code) {
       console.error("❌ No authorization code received")
-      return res.redirect("http://localhost:5173/login?error=no_code")
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`)
     }
 
     console.log("✅ Authorization code received")
 
-    const redirectUri = "http://localhost:3000/auth/google/ProjectforGoogleOauth"
+    const redirectUri = `${process.env.BACKEND_URL}/auth/google/ProjectforGoogleOauth`
 
     // Exchange code for tokens
     const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
@@ -111,10 +111,10 @@ router.get("/google/ProjectforGoogleOauth", async (req, res) => {
     console.log("✅ JWT token generated for user:", user.email)
 
     // Redirect to frontend with token
-    res.redirect(`http://localhost:5173/auth-success?token=${token}`)
+    res.redirect(`${process.env.FRONTEND_URL}/auth-success?token=${token}`)
   } catch (error) {
     console.error("❌ Google OAuth callback error:", error.response?.data || error.message)
-    res.redirect("http://localhost:5173/login?error=auth_failed")
+    res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`)
   }
 })
 
