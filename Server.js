@@ -33,23 +33,31 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 console.log("✅ Google Client ID:", process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + "...")
+console.log("✅ Frontend URL:", process.env.FRONTEND_URL || process.env.DEV_FRONTEND_URL || "http://localhost:5173")
+console.log("✅ Backend URL:", process.env.BACKEND_URL || process.env.DEV_BACKEND_URL || "http://localhost:3000")
 
-// ✅ PRESERVED: Your original CORS configuration with network IP support
+// Get URLs from environment variables with fallbacks
+const frontendUrl = process.env.FRONTEND_URL || process.env.DEV_FRONTEND_URL || "http://localhost:5173"
+const backendUrl = process.env.BACKEND_URL || process.env.DEV_BACKEND_URL || "http://localhost:3000"
+
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true)
 
-    // Allow localhost and your network IP
+    // Production and development URLs
     const allowedOrigins = [
+      // Production URLs from environment
+      frontendUrl,
+      backendUrl,
+      // Development URLs
       "http://localhost:5173",
       "http://localhost:3000",
       "http://127.0.0.1:5173",
-      // Add your network IP here - replace with your actual IP
-      "http://192.168.1.100:5173", // Example - replace with your IP
-      "http://192.168.0.100:5173", // Another common range
-      "http://10.0.0.100:5173", 
-      "https://ai-trip-planner24.netlify.app/",   // Another common range
+      // Network IPs for local development
+      "http://192.168.1.100:5173",
+      "http://192.168.0.100:5173",
+      "http://10.0.0.100:5173",
     ]
 
     // Check if origin matches any allowed pattern or is a local network IP
@@ -83,7 +91,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       httpOnly: true,
     },
@@ -104,7 +112,15 @@ const io = new Server(server, {
       // Allow requests with no origin
       if (!origin) return callback(null, true)
 
-      const allowedOrigins = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+      const allowedOrigins = [
+        // Production URLs from environment
+        frontendUrl,
+        backendUrl,
+        // Development URLs
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+      ]
 
       // Check if origin matches any allowed pattern or is a local network IP
       const isLocalNetwork =
@@ -175,13 +191,17 @@ app.get("/", (req, res) => {
     socketIO: {
       status: "active",
       connectedClients,
-      endpoint: `http://localhost:${PORT}`,
+      endpoint: backendUrl,
     },
-    googleOAuth: "http://localhost:3000/auth/google",
-    redirectUri: "http://localhost:3000/auth/google/ProjectforGoogleOauth",
+    googleOAuth: `${backendUrl}/auth/google`,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`,
     status: "healthy",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    urls: {
+      frontend: frontendUrl,
+      backend: backendUrl,
+    },
     availableRoutes: {
       auth: "/api/auth/*",
       trips: "/api/trips/*",
@@ -215,6 +235,10 @@ app.get("/health", (req, res) => {
     socketIO: {
       status: "active",
       connectedClients,
+    },
+    urls: {
+      frontend: frontendUrl,
+      backend: backendUrl,
     },
     uptime: process.uptime(),
     memory: process.memoryUsage(),
@@ -288,13 +312,15 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`📅 Timestamp: ${new Date().toISOString()}`)
   console.log(`🌐 Environment: ${process.env.NODE_ENV || "development"}`)
   console.log(`📡 Server running on port ${PORT}`)
-  console.log(`📊 Health check: http://localhost:${PORT}/health`)
-  console.log(`🔐 Google OAuth: http://localhost:${PORT}/auth/google`)
-  console.log(`🔄 Callback URI: http://localhost:${PORT}/auth/google/callback`)
-  console.log(`💾 Trip endpoints: http://localhost:${PORT}/api/trips`)
-  console.log(`💬 Chat endpoints: http://localhost:${PORT}/api/chat`)
-  console.log(`🌐 Social endpoints: http://localhost:${PORT}/api/social`)
-  console.log(`📞 Agora endpoints: http://localhost:${PORT}/api/agora`)
+  console.log(`🌐 Frontend URL: ${frontendUrl}`)
+  console.log(`🌐 Backend URL: ${backendUrl}`)
+  console.log(`📊 Health check: ${backendUrl}/health`)
+  console.log(`🔐 Google OAuth: ${backendUrl}/auth/google`)
+  console.log(`🔄 Callback URI: ${process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`}`)
+  console.log(`💾 Trip endpoints: ${backendUrl}/api/trips`)
+  console.log(`💬 Chat endpoints: ${backendUrl}/api/chat`)
+  console.log(`🌐 Social endpoints: ${backendUrl}/api/social`)
+  console.log(`📞 Agora endpoints: ${backendUrl}/api/agora`)
   console.log(`📞 Call system: Ready for voice/video calls`)
   console.log(`🎧 Agora RTM: Real-time messaging enabled`)
   console.log(`🎥 Agora RTC: Audio/Video calls enabled`)
@@ -304,7 +330,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`👥 Connected clients: ${connectedClients}`)
   console.log(`
 📝 Add this to Google Cloud Console:`)
-  console.log(`   Authorized redirect URI: http://localhost:${PORT}/auth/google/callback`)
+  console.log(`   Authorized redirect URI: ${process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`}`)
   console.log(`
 ✅ Enhanced Social Travel Server ready to accept connections!`)
   console.log(
