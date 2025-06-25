@@ -48,7 +48,8 @@ const corsOptions = {
       // Add your network IP here - replace with your actual IP
       "http://192.168.1.100:5173", // Example - replace with your IP
       "http://192.168.0.100:5173", // Another common range
-      "http://10.0.0.100:5173", // Another common range
+      "http://10.0.0.100:5173", 
+      "https://ai-trip-planner24.netlify.app/",   // Another common range
     ]
 
     // Check if origin matches any allowed pattern or is a local network IP
