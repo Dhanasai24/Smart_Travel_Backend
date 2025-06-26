@@ -10,128 +10,106 @@ import chatRoutes from "./Routes/ChatRoutes.js"
 import socialRoutes from "./Routes/SocialRoutes.js"
 import simpleGoogleAuth from "./Routes/SimpleGoogleAuth.js"
 import agoraRoutes from "./Routes/AgoraRoutes.js"
-import streamChatRoutes from "./Routes/StreamChatRoutes.js" // Added import
+import streamChatRoutes from "./Routes/StreamChatRoutes.js"
 import { initializeDatabase } from "./config/database.js"
 import { createServer } from "http"
 import { Server } from "socket.io"
 import { registerSocketHandlers } from "./socketHandlers.js"
 import ablyRoutes from "./Routes/AblyRoutes.js"
-import locationRoutes from "./Routes/LocationRoutes.js" // ✅ NEW: Import location routes
+import locationRoutes from "./Routes/LocationRoutes.js"
 import reviewRoutes from "./Routes/ReviewRoutes.js"
 
+// ✅ Load environment variables FIRST
 dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 3000
+
+// ✅ ENHANCED: Better environment detection
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  process.env.BACKEND_URL?.includes("render.com") ||
+  process.env.BACKEND_URL?.includes("herokuapp.com")
+
+const FRONTEND_URL = isProduction
+  ? process.env.FRONTEND_URL || "https://ai-trip-planner24.netlify.app"
+  : "http://localhost:5173"
+
+const BACKEND_URL = isProduction
+  ? process.env.BACKEND_URL || "https://smart-travel-backend-7mzh.onrender.com"
+  : "http://localhost:3000"
+
+// ✅ CRITICAL: Enhanced environment logging
+console.log("🚀 === SERVER STARTUP ENVIRONMENT CHECK ===")
+console.log("NODE_ENV:", process.env.NODE_ENV)
+console.log("Is Production:", isProduction)
+console.log("PORT:", PORT)
+console.log("FRONTEND_URL from process.env:", process.env.FRONTEND_URL)
+console.log("BACKEND_URL from process.env:", process.env.BACKEND_URL)
+console.log("Final FRONTEND_URL:", FRONTEND_URL)
+console.log("Final BACKEND_URL:", BACKEND_URL)
+console.log("Expected OAuth Redirect URI:", `${BACKEND_URL}/auth/google/ProjectforGoogleOauth`)
+console.log("Google Client ID:", process.env.GOOGLE_CLIENT_ID ? "✅ Set" : "❌ Missing")
+console.log("Google Client Secret:", process.env.GOOGLE_CLIENT_SECRET ? "✅ Set" : "❌ Missing")
+console.log("JWT Secret:", process.env.JWT_SECRET ? "✅ Set" : "❌ Missing")
+console.log("🚀 === END ENVIRONMENT CHECK ===")
 
 await initializeDatabase()
 
 // Validate environment variables
 if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
   console.error("❌ Missing Google OAuth credentials in .env file")
+  console.error("❌ GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID ? "Set" : "Missing")
+  console.error("❌ GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "Set" : "Missing")
   process.exit(1)
 }
 
 console.log("✅ Google Client ID:", process.env.GOOGLE_CLIENT_ID?.substring(0, 20) + "...")
-console.log("✅ Frontend URL:", process.env.FRONTEND_URL || process.env.DEV_FRONTEND_URL || "http://localhost:5173")
-console.log("✅ Backend URL:", process.env.BACKEND_URL || process.env.DEV_BACKEND_URL || "http://localhost:3000")
 
-// Get URLs from environment variables with fallbacks
-const frontendUrl = process.env.FRONTEND_URL || process.env.DEV_FRONTEND_URL || "http://localhost:5173"
-const backendUrl = process.env.BACKEND_URL || process.env.DEV_BACKEND_URL || "http://localhost:3000"
-
-// ✅ ENHANCED CORS CONFIGURATION
+// ✅ UPDATED: CORS configuration with forced production URLs
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true)
 
-    // Production and development URLs
+    // ✅ FORCE production URLs
     const allowedOrigins = [
-      // Production URLs - HARDCODED for reliability
+      FRONTEND_URL,
+      BACKEND_URL,
       "https://ai-trip-planner24.netlify.app",
       "https://smart-travel-backend-7mzh.onrender.com",
-      // Environment URLs
-      frontendUrl,
-      backendUrl,
-      // Development URLs
-      "http://localhost:5173",
-      "http://localhost:3000",
+      "http://localhost:5173", // Keep for local development
+      "http://localhost:3000", // Keep for local development
       "http://127.0.0.1:5173",
-      // Network IPs for local development
-      "http://192.168.1.100:5173",
-      "http://192.168.0.100:5173",
-      "http://10.0.0.100:5173",
+      "http://127.0.0.1:3000",
     ]
+
+    console.log("🔍 CORS check - Origin:", origin)
+    console.log("🔍 CORS check - Allowed origins:", allowedOrigins)
 
     // Check if origin matches any allowed pattern or is a local network IP
     const isLocalNetwork =
-      /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin) ||
-      /^http:\/\/10\.\d+\.\d+\.\d+:5173$/.test(origin) ||
-      /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:5173$/.test(origin)
+      /^http:\/\/192\.168\.\d+\.\d+:(5173|3000)$/.test(origin) ||
+      /^http:\/\/10\.\d+\.\d+\.\d+:(5173|3000)$/.test(origin) ||
+      /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:(5173|3000)$/.test(origin)
 
     if (allowedOrigins.includes(origin) || isLocalNetwork) {
       console.log("✅ CORS allowed for origin:", origin)
       callback(null, true)
     } else {
       console.log("❌ CORS blocked origin:", origin)
-      console.log("🔍 Allowed origins:", allowedOrigins)
-      callback(null, true) // Allow all for debugging - change in production
+      callback(null, true) // Allow all for now - restrict in production
     }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Requested-With",
-    "Accept",
-    "Origin",
-    "Access-Control-Request-Method",
-    "Access-Control-Request-Headers",
-  ],
-  exposedHeaders: ["Set-Cookie"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   optionsSuccessStatus: 200,
-  preflightContinue: false,
 }
 
-// ✅ APPLY CORS FIRST - BEFORE ANY OTHER MIDDLEWARE
+// Middleware
 app.use(cors(corsOptions))
-
-// ✅ EXPLICIT OPTIONS HANDLER FOR ALL ROUTES
-app.options("*", cors(corsOptions))
-
-// ✅ MANUAL CORS HEADERS AS BACKUP
-app.use((req, res, next) => {
-  const origin = req.headers.origin
-  const allowedOrigins = [
-    "https://ai-trip-planner24.netlify.app",
-    "https://smart-travel-backend-7mzh.onrender.com",
-    "http://localhost:5173",
-    "http://localhost:3000",
-  ]
-
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin)
-  }
-
-  res.header("Access-Control-Allow-Credentials", "true")
-  res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS,PATCH")
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
-  )
-  res.header("Access-Control-Expose-Headers", "Set-Cookie")
-
-  if (req.method === "OPTIONS") {
-    console.log("✅ Handling OPTIONS preflight request from:", origin)
-    res.sendStatus(200)
-  } else {
-    next()
-  }
-})
-
-app.use(express.json({ limit: "10mb" })) // Increased limit for larger payloads
+app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 // Enhanced session configuration
@@ -141,10 +119,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     },
   }),
 )
@@ -156,37 +133,10 @@ app.use(passport.session())
 // Create HTTP server
 const server = createServer(app)
 
-// ✅ PRESERVED: Socket.IO setup with call support (keeping your original config)
+// ✅ Socket.IO setup with forced production URLs
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin
-      if (!origin) return callback(null, true)
-
-      const allowedOrigins = [
-        // Production URLs from environment
-        "https://ai-trip-planner24.netlify.app",
-        "https://smart-travel-backend-7mzh.onrender.com",
-        frontendUrl,
-        backendUrl,
-        // Development URLs
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-      ]
-
-      // Check if origin matches any allowed pattern or is a local network IP
-      const isLocalNetwork =
-        /^http:\/\/192\.168\.\d+\.\d+:5173$/.test(origin) ||
-        /^http:\/\/10\.\d+\.\d+\.\d+:5173$/.test(origin) ||
-        /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:5173$/.test(origin)
-
-      if (allowedOrigins.includes(origin) || isLocalNetwork) {
-        callback(null, true)
-      } else {
-        callback(null, true) // Allow all for development - restrict in production
-      }
-    },
+    origin: [FRONTEND_URL, BACKEND_URL, "http://localhost:5173", "http://localhost:3000"],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -211,80 +161,57 @@ io.on("connection", (socket) => {
     console.error(`🔌 Socket error for ${socket.id}:`, error)
   })
 
-  // ✅ PRESERVED: Register existing socket handlers (includes enhanced call features)
   registerSocketHandlers(io, socket)
 })
 
 // Debug middleware to log all requests
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString()
-  console.log(`📝 ${req.method} ${req.path} - ${timestamp} - Origin: ${req.headers.origin}`)
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log("📦 Request body:", JSON.stringify(req.body, null, 2))
-  }
+  console.log(`📝 ${req.method} ${req.path} - ${timestamp}`)
   next()
 })
 
-// ✅ PRESERVED: Your original routes + NEW Agora routes + NEW StreamChat routes
+// ✅ Routes
 app.use("/api/auth", authRoutes)
-app.use("/auth", simpleGoogleAuth)
 app.use("/api/trips", tripRoutes)
 app.use("/api/chat", chatRoutes)
-app.use("/api/chat", streamChatRoutes) // Added StreamChat routes
+app.use("/api/chat", streamChatRoutes)
 app.use("/api/social", socialRoutes)
 app.use("/api/agora", agoraRoutes)
+app.use("/auth", simpleGoogleAuth) // ✅ This handles /auth/google and /auth/google/ProjectforGoogleOauth
 app.use("/api/ably", ablyRoutes)
-app.use("/location", locationRoutes) // ✅ NEW: Add location routes
-app.use("/api/reviews", reviewRoutes) // ✅ NEW: Add review routes
+app.use("/location", locationRoutes)
+app.use("/api/reviews", reviewRoutes)
 
-// ✅ PRESERVED: Your original basic routes
+// ✅ Enhanced root endpoint with OAuth debug info
 app.get("/", (req, res) => {
+  const expectedRedirectUri = `${BACKEND_URL}/auth/google/ProjectforGoogleOauth`
+
   res.json({
     message: "Smart Journey API is running!",
+    environment: {
+      NODE_ENV: process.env.NODE_ENV,
+      isProduction: isProduction,
+      FRONTEND_URL: FRONTEND_URL,
+      BACKEND_URL: BACKEND_URL,
+      hasGoogleOAuth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    },
+    oauth: {
+      googleAuthUrl: `${BACKEND_URL}/auth/google`,
+      expectedRedirectUri: expectedRedirectUri,
+      debugUrl: `${BACKEND_URL}/auth/debug`,
+      googleCloudConsoleCheck: {
+        message: "Ensure this exact URI is in your Google Cloud Console:",
+        redirectUri: expectedRedirectUri,
+      },
+    },
     socketIO: {
       status: "active",
-      connectedClients,
-      endpoint: backendUrl,
+      connectedClients: connectedClients,
+      endpoint: BACKEND_URL,
     },
-    googleOAuth: `${backendUrl}/auth/google`,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`,
     status: "healthy",
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
-    urls: {
-      frontend: frontendUrl,
-      backend: backendUrl,
-    },
-    cors: {
-      allowedOrigins: [
-        "https://ai-trip-planner24.netlify.app",
-        "https://smart-travel-backend-7mzh.onrender.com",
-        frontendUrl,
-        backendUrl,
-      ],
-    },
-    availableRoutes: {
-      auth: "/api/auth/*",
-      trips: "/api/trips/*",
-      chat: "/api/chat/*",
-      streamChat: "/api/chat/stream-token, /api/chat/channels/*",
-      social: "/api/social/*",
-      agora: "/api/agora/*",
-      ably: "/api/ably/*",
-      googleAuth: "/auth/google",
-      reviews: "/api/reviews/*",
-    },
-    features: {
-      "social-travel": "enabled",
-      "real-time-chat": "enabled",
-      "stream-chat": "enabled",
-      "voice-video-calls": "enabled",
-      "agora-communication": "enabled",
-      "location-based": "enabled",
-      "smart-matching": "enabled",
-      "enhanced-location": "enabled", // ✅ NEW: Added enhanced location feature
-      "review-system": "enabled",
-    },
   })
 })
 
@@ -293,24 +220,21 @@ app.get("/health", (req, res) => {
     status: "Server is running",
     timestamp: new Date().toISOString(),
     database: "connected",
+    environment: {
+      FRONTEND_URL: FRONTEND_URL,
+      BACKEND_URL: BACKEND_URL,
+      NODE_ENV: process.env.NODE_ENV,
+    },
+    oauth: {
+      googleClientIdSet: !!process.env.GOOGLE_CLIENT_ID,
+      googleClientSecretSet: !!process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: `${BACKEND_URL}/auth/google/ProjectforGoogleOauth`,
+    },
     socketIO: {
       status: "active",
-      connectedClients,
-    },
-    urls: {
-      frontend: frontendUrl,
-      backend: backendUrl,
+      connectedClients: connectedClients,
     },
     uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    features: {
-      "enhanced-social": "active",
-      "call-system": "ready",
-      "agora-rtm": "ready",
-      "agora-rtc": "ready",
-      "location-services": "enabled",
-      "enhanced-location": "enabled", // ✅ NEW: Added enhanced location feature
-    },
   })
 })
 
@@ -329,7 +253,7 @@ app.use((err, req, res, next) => {
   })
 })
 
-// ✅ PRESERVED: Your original 404 handler with added Agora endpoints
+// 404 handler
 app.use((req, res) => {
   const timestamp = new Date().toISOString()
   console.log(`❌ 404 - Route not found: ${req.method} ${req.path} at ${timestamp}`)
@@ -338,76 +262,32 @@ app.use((req, res) => {
     requestedPath: req.path,
     method: req.method,
     timestamp,
-    availableRoutes: [
-      "GET /",
-      "GET /health",
-      "POST /api/trips",
-      "GET /api/trips",
-      "GET /api/trips/:id",
-      "POST /api/auth/login",
-      "POST /api/auth/register",
-      "GET /auth/google",
-      "POST /api/chat/connect",
-      "GET /api/chat/rooms/:roomId/messages",
-      "POST /api/chat/rooms/:roomId/messages",
-      "POST /api/chat/call/initiate",
-      "POST /api/chat/call/accept",
-      "POST /api/chat/call/reject",
-      "POST /api/agora/rtm-token",
-      "POST /api/agora/rtc-token",
-      "GET /api/social/discover",
-      "GET /api/social/matches",
-      "GET /api/social/chats",
-      "GET /api/social/nearby",
-      "GET /api/social/nearby-distance",
-      "POST /api/social/location",
-      "GET /api/social/user-location/:targetUserId", // ✅ NEW: Added enhanced location endpoint
-    ],
+    environment: {
+      FRONTEND_URL: FRONTEND_URL,
+      BACKEND_URL: BACKEND_URL,
+    },
   })
 })
 
-// ✅ PRESERVED: Your original server startup message with enhanced Agora features
+// ✅ Server startup with comprehensive logging
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`
-🚀 Enhanced Smart Journey Server Started Successfully!`)
+🚀 === SMART JOURNEY SERVER STARTED ===`)
   console.log(`📅 Timestamp: ${new Date().toISOString()}`)
   console.log(`🌐 Environment: ${process.env.NODE_ENV || "development"}`)
   console.log(`📡 Server running on port ${PORT}`)
-  console.log(`🌐 Frontend URL: ${frontendUrl}`)
-  console.log(`🌐 Backend URL: ${backendUrl}`)
-  console.log(`📊 Health check: ${backendUrl}/health`)
-  console.log(`🔐 Google OAuth: ${backendUrl}/auth/google`)
-  console.log(`🔄 Callback URI: ${process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`}`)
-  console.log(`💾 Trip endpoints: ${backendUrl}/api/trips`)
-  console.log(`💬 Chat endpoints: ${backendUrl}/api/chat`)
-  console.log(`🌐 Social endpoints: ${backendUrl}/api/social`)
-  console.log(`📞 Agora endpoints: ${backendUrl}/api/agora`)
-  console.log(`📞 Call system: Ready for voice/video calls`)
-  console.log(`🎧 Agora RTM: Real-time messaging enabled`)
-  console.log(`🎥 Agora RTC: Audio/Video calls enabled`)
-  console.log(`📍 Location services: Enabled`)
-  console.log(`🗺️ Enhanced location: Address conversion enabled`) // ✅ NEW: Added enhanced location log
+  console.log(`🔗 Backend URL: ${BACKEND_URL}`)
+  console.log(`🔗 Frontend URL: ${FRONTEND_URL}`)
+  console.log(`📊 Health check: ${BACKEND_URL}/health`)
+  console.log(`🔐 Google OAuth: ${BACKEND_URL}/auth/google`)
+  console.log(`🔄 OAuth Callback: ${BACKEND_URL}/auth/google/ProjectforGoogleOauth`)
+  console.log(`🐛 OAuth Debug: ${BACKEND_URL}/auth/debug`)
   console.log(`🔌 Socket.IO server running on port ${PORT}`)
   console.log(`👥 Connected clients: ${connectedClients}`)
   console.log(`
-🔒 CORS Configuration:`)
-  console.log(`   ✅ Frontend: ${frontendUrl}`)
-  console.log(`   ✅ Production Frontend: https://ai-trip-planner24.netlify.app`)
-  console.log(`   ✅ Backend: ${backendUrl}`)
-  console.log(`   ✅ Production Backend: https://smart-travel-backend-7mzh.onrender.com`)
+📝 === GOOGLE CLOUD CONSOLE CONFIGURATION ===`)
+  console.log(`   Authorized JavaScript origins: ${FRONTEND_URL}`)
+  console.log(`   Authorized redirect URI: ${BACKEND_URL}/auth/google/ProjectforGoogleOauth`)
   console.log(`
-📝 Add this to Google Cloud Console:`)
-  console.log(`   Authorized redirect URI: ${process.env.GOOGLE_REDIRECT_URI || `${backendUrl}/auth/google/callback`}`)
-  console.log(`
-✅ Enhanced Social Travel Server ready to accept connections!`)
-  console.log(
-    `🎯 Features: Social Travel • Real-time Chat • Voice/Video Calls • Agora Communication • Enhanced Location Services`,
-  )
-
-  // ✅ PRESERVED: Network access instructions
-  console.log(`
-🌐 For network access from other devices:`)
-  console.log(`   1. Find your IP: ipconfig (Windows) or ifconfig (Mac/Linux)`)
-  console.log(`   2. Access from other devices: http://YOUR_IP:${PORT}`)
-  console.log(`   3. Update CORS origins in server if needed`)
+✅ Server ready to accept connections!`)
 })
